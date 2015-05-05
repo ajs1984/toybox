@@ -43,7 +43,7 @@ static int del_node(struct dirtree *node)
 
 void switch_root_main(void)
 {
-  char *newroot = *toys.optargs, **cmdline = toys.optargs+1;
+  char *newroot = *toys.optargs, **cmdline = toys.optargs+1, *rel_cmdline;
   struct stat st1, st2;
   struct statfs stfs;
   int console = console; // gcc's "may be used" warnings are broken.
@@ -68,7 +68,10 @@ void switch_root_main(void)
   TT.rootdev=st2.st_dev;
 
   // init program must exist and be an executable file
-  if (stat("init", &st1) || !S_ISREG(st1.st_mode) || !(st1.st_mode&0100)) {
+  rel_cmdline = *cmdline[0] == '/' ? *cmdline+1 : *cmdline;
+  if (stat(rel_cmdline, &st1) || !S_ISREG(st1.st_mode) ||
+    !(st1.st_mode&0100))
+  {
     error_msg("bad init");
     goto panic;
   }
@@ -80,6 +83,13 @@ void switch_root_main(void)
  
   // Ok, enough safety checks: wipe root partition.
   dirtree_read("/", del_node);
+
+  // Move the newroot to the old root and enter it
+  if (mount(".", "/", NULL, MS_MOVE, NULL)) {
+    error_msg("mount(.., MS_MOVE, ..) failed");
+    goto panic;
+  }
+  xchroot(".");
 
   if (TT.console) {
     int i;
